@@ -15,19 +15,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Clean Ghost Submodules
+        run: |
+          # This forces Git to forget about that framework folder
+          git rm -r --cached framework || true
+          rm -rf .gitmodules || true
+
       - name: Install Theos
         run: |
           git clone --recursive https://github.com/theos/theos.git $THEOS
           
       - name: Setup SDK
         run: |
+          # Remove the existing empty sdks folder created by Theos install
+          rm -rf $THEOS/sdks
           git clone https://github.com/theos/sdks.git $THEOS/sdks
-          # We use the 16.5 SDK which is perfect for your 16.7.12 build
           
       - name: Build Package
         run: |
           export THEOS_PACKAGE_SCHEME=rootless
-          # We point to the local Theos we just installed
           make package FINALPACKAGE=1
         
       - name: Upload Artifact
