@@ -1,18 +1,22 @@
 #import <notify.h>
 #import <Foundation/Foundation.h>
 
-// Rootless Path Helper
 #ifndef ROOT_PATH_NS
 #define ROOT_PATH_NS(path) \
     ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"] ? \
     [@"/var/jb" stringByAppendingPathComponent:path] : path)
 #endif
 
+// Hooking every possible thermal management class found in iOS 16
 @interface CommonProduct : NSObject
 - (void)putDeviceInThermalSimulationMode:(NSString *)mode;
 @end
 
 @interface GPProduct : NSObject
+- (void)putDeviceInThermalSimulationMode:(NSString *)mode;
+@end
+
+@interface CLPProduct : NSObject
 - (void)putDeviceInThermalSimulationMode:(NSString *)mode;
 @end
 
@@ -39,9 +43,11 @@ static void ApplyThermals(void) {
     
     if (currentTarget) {
         NSString *modeString = stringForMode(mode);
+        // Try all known methods for iOS 16
         if ([currentTarget respondsToSelector:@selector(putDeviceInThermalSimulationMode:)]) {
             [currentTarget putDeviceInThermalSimulationMode:modeString];
-        } else if ([currentTarget respondsToSelector:@selector(setThermalSimulationMode:)]) {
+        } 
+        if ([currentTarget respondsToSelector:@selector(setThermalSimulationMode:)]) {
             [currentTarget setThermalSimulationMode:(int)mode];
         }
     }
@@ -64,6 +70,14 @@ static void ApplyThermals(void) {
 }
 %end
 
+%hook CLPProduct
+- (id)initProduct:(id)arg1 {
+    self = %orig;
+    if (self) { currentTarget = self; ApplyThermals(); }
+    return self;
+}
+%end
+
 %hook Context
 - (id)init {
     self = %orig;
@@ -79,7 +93,7 @@ static void LoadSettings(void) {
     
     uint64_t mode = [prefs[@"PowerMode"] ?: @0 unsignedLongLongValue];
     
-    // Check if we should only apply in Low Power Mode
+    // Disable if LPM is required but not active
     if ([prefs[@"RequireLowPowerMode"] boolValue]) {
         if (![[NSProcessInfo processInfo] isLowPowerModeEnabled]) {
             mode = 0;
@@ -113,5 +127,6 @@ static void LoadSettings(void) {
     } else if ([proc isEqualToString:@"SpringBoard"]) {
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (void *)LoadSettings, CFSTR("com.rpetrich.powercuff.settingschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
         %init(SpringBoard);
+        LoadSettings();
     }
 }
