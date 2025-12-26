@@ -1,0 +1,28 @@
+name: Build Powercuff Rootless
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Theos
+        uses: themmhd/theos-action@main
+
+      - name: Build Package
+        run: |
+          export THEOS_PACKAGE_SCHEME=rootless
+          make package FINALPACKAGE=1
+        
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Powercuff-Rootless-Deb
+          path: packages/*.deb
