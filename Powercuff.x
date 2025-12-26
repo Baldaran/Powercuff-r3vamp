@@ -7,48 +7,32 @@
     [@"/var/jb" stringByAppendingPathComponent:path] : path)
 #endif
 
-// Hooking every possible thermal management class found in iOS 16
 @interface CommonProduct : NSObject
 - (void)putDeviceInThermalSimulationMode:(NSString *)mode;
-@end
-
-@interface GPProduct : NSObject
-- (void)putDeviceInThermalSimulationMode:(NSString *)mode;
-@end
-
-@interface CLPProduct : NSObject
-- (void)putDeviceInThermalSimulationMode:(NSString *)mode;
-@end
-
-@interface Context : NSObject
-- (void)setThermalSimulationMode:(int)mode;
 @end
 
 static id currentTarget;
 static int token;
 
-static NSString *stringForMode(uint64_t mode) {
-    switch (mode) {
-        case 1: return @"nominal";
-        case 2: return @"light";
-        case 3: return @"moderate";
-        case 4: return @"heavy";
-        default: return @"off";
-    }
-}
-
 static void ApplyThermals(void) {
     uint64_t mode = 0;
     notify_get_state(token, &mode);
     
+    // Index mapping: 0:None, 1:Nominal, 2:Light, 3:Moderate, 4:Heavy
+    NSArray *modes = @[@"off", @"nominal", @"light", @"moderate", @"heavy"];
+    
     if (currentTarget) {
-        NSString *modeString = stringForMode(mode);
-        // Try all known methods for iOS 16
-        if ([currentTarget respondsToSelector:@selector(putDeviceInThermalSimulationMode:)]) {
-            [currentTarget putDeviceInThermalSimulationMode:modeString];
-        } 
-        if ([currentTarget respondsToSelector:@selector(setThermalSimulationMode:)]) {
-            [currentTarget setThermalSimulationMode:(int)mode];
+        if (mode == 0) {
+            // GENIUS RESET: Explicitly tell iOS to stop simulating heat
+            if ([currentTarget respondsToSelector:@selector(putDeviceInThermalSimulationMode:)]) {
+                [currentTarget putDeviceInThermalSimulationMode:nil]; 
+                [currentTarget putDeviceInThermalSimulationMode:@"off"];
+            }
+        } else if (mode < modes.count) {
+            NSString *modeStr = modes[mode];
+            if ([currentTarget respondsToSelector:@selector(putDeviceInThermalSimulationMode:)]) {
+                [currentTarget putDeviceInThermalSimulationMode:modeStr];
+            }
         }
     }
 }
@@ -57,31 +41,22 @@ static void ApplyThermals(void) {
 %hook CommonProduct
 - (id)initProduct:(id)arg1 {
     self = %orig;
-    if (self) { currentTarget = self; ApplyThermals(); }
+    if (self) {
+        currentTarget = self;
+        ApplyThermals();
+    }
     return self;
 }
 %end
 
+// Fallback for newer iOS 16 thermal structures
 %hook GPProduct
 - (id)initProduct:(id)arg1 {
     self = %orig;
-    if (self) { currentTarget = self; ApplyThermals(); }
-    return self;
-}
-%end
-
-%hook CLPProduct
-- (id)initProduct:(id)arg1 {
-    self = %orig;
-    if (self) { currentTarget = self; ApplyThermals(); }
-    return self;
-}
-%end
-
-%hook Context
-- (id)init {
-    self = %orig;
-    if (self) { currentTarget = self; ApplyThermals(); }
+    if (self) {
+        currentTarget = self;
+        ApplyThermals();
+    }
     return self;
 }
 %end
@@ -93,10 +68,10 @@ static void LoadSettings(void) {
     
     uint64_t mode = [prefs[@"PowerMode"] ?: @0 unsignedLongLongValue];
     
-    // Disable if LPM is required but not active
+    // Check Low Power Mode requirement
     if ([prefs[@"RequireLowPowerMode"] boolValue]) {
         if (![[NSProcessInfo processInfo] isLowPowerModeEnabled]) {
-            mode = 0;
+            mode = 0; // Force 'None' if LPM isn't active
         }
     }
     
@@ -104,29 +79,19 @@ static void LoadSettings(void) {
     notify_post("com.rpetrich.powercuff.thermals");
 }
 
-%group SpringBoard
-%hook SpringBoard
-- (void)applicationDidFinishLaunching:(id)arg1 {
-    %orig;
-    LoadSettings();
-}
-- (void)_batterySaverModeChanged:(int)arg1 {
-    %orig;
-    LoadSettings();
-}
-%end
-%end
-
 %ctor {
     notify_register_check("com.rpetrich.powercuff.thermals", &token);
-    NSString *proc = [[NSProcessInfo processInfo] processName];
+    NSString *procName = [[NSProcessInfo processInfo] processName];
     
-    if ([proc isEqualToString:@"thermalmonitord"]) {
+    if ([procName isEqualToString:@"thermalmonitord"]) {
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (void *)ApplyThermals, CFSTR("com.rpetrich.powercuff.thermals"), NULL, CFNotificationSuspensionBehaviorCoalesce);
         %init(thermalmonitord);
-    } else if ([proc isEqualToString:@"SpringBoard"]) {
+    } else {
+        // Observer for SpringBoard and Apps to watch for setting changes
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (void *)LoadSettings, CFSTR("com.rpetrich.powercuff.settingschanged"), NULL, CFNotificationSuspensionBehaviorCoalesce);
-        %init(SpringBoard);
-        LoadSettings();
+        
+        if ([procName isEqualToString:@"SpringBoard"]) {
+            LoadSettings();
+        }
     }
 }
