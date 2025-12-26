@@ -1,17 +1,17 @@
+# Define the target and SDK
+TARGET := iphone:clang:latest:15.0
+INSTALL_TARGET_PROCESSES = thermalmonitord SpringBoard
+
+# Set the architectures for modern devices
+ARCHS = arm64 arm64e
+
+# This is the key for Rootless compatibility
+THEOS_PACKAGE_SCHEME = rootless
+
 TWEAK_NAME = Powercuff
 Powercuff_FILES = Powercuff.x
 Powercuff_FRAMEWORKS = Foundation
-Powercuff_USE_MODULES = false
+Powercuff_CFLAGS = -fobjc-arc -std=c99
 
-IPHONE_ARCHS = arm64 arm64e
-
-TARGET_IPHONEOS_DEPLOYMENT_VERSION = 7.0
-TARGET_IPHONEOS_DEPLOYMENT_VERSION_arm64 = 7.0
-TARGET_IPHONEOS_DEPLOYMENT_VERSION_arm64e = 8.4
-
-ADDITIONAL_CFLAGS = -std=c99
-
-INSTALL_TARGET_PROCESSES = thermalmonitord SpringBoard
-
-include framework/makefiles/common.mk
-include framework/makefiles/tweak.mk
+include $(THEOS)/makefiles/common.mk
+include $(THEOS_MAKE_PATH)/tweak.mk
