@@ -1,6 +1,6 @@
 Package: com.baldaran.powercuff-r3vamp
 Name: Powercuff r3vamp
-Depends: mobilesubstrate (>= 0.9.5000), firmware (>= 14.0)
+Depends: mobilesubstrate (>= 0.9.5000), preferenceloader, firmware (>= 14.0)
 Version: 1.0.0
 Architecture: iphoneos-arm64
 Description: Advanced power management for iOS 16 Rootless.
