@@ -4,13 +4,10 @@
 <dict>
     <key>Filter</key>
     <dict>
-        <key>Executables</key>
-        <array>
-            <string>thermalmonitord</string>
-        </array>
         <key>Bundles</key>
         <array>
             <string>com.apple.springboard</string>
+            <string>com.apple.thermalmonitord</string>
         </array>
     </dict>
 </dict>
